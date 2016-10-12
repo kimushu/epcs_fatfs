@@ -43,6 +43,4 @@ struct epcs_fatfs
 #define EPCS_FATFS_INIT(name, dev) \
   epcs_fatfs_init (&dev)
 
-#define EPCS_FATFS_
-
 #endif /* __EPCS_FATFS_H__ */
