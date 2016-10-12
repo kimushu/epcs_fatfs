@@ -428,6 +428,9 @@ typedef struct {
 #define	DDEM				0xE5	/* Deleted directory entry mark at DIR_Name[0] */
 #define	RDDEM				0x05	/* Replacement of the character collides with DDEM */
 
+#ifndef	_MIN_VOLS
+#define	_MIN_VOLS	128
+#endif
 
 
 
@@ -4109,7 +4112,7 @@ FRESULT f_mkfs (
 		n_vol = LD_DWORD(tbl + 12);	/* Volume size */
 	} else {
 		/* Create a partition in this function */
-		if (disk_ioctl(pdrv, GET_SECTOR_COUNT, &n_vol) != RES_OK || n_vol < 128)
+		if (disk_ioctl(pdrv, GET_SECTOR_COUNT, &n_vol) != RES_OK || n_vol < _MIN_VOLS)
 			return FR_DISK_ERR;
 		b_vol = (sfd) ? 0 : 63;		/* Volume start sector */
 		n_vol -= b_vol;				/* Volume size */
