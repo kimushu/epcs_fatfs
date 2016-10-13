@@ -29,10 +29,11 @@ add_sw_property supported_bsp_type TINYTH
 # Settings
 
 add_sw_setting quoted_string system_h_define mount_point EPCS_FATFS_MOUNT_POINT /mnt/epcs "Mount point"
-add_sw_setting unquoted_string system_h_define epcs.base_address EPCS_FATFS_EPCS_BASE 0 "Base address of EPCS control port"
-add_sw_setting boolean_define_only system_h_define epcs.use_swi EPCS_FATFS_EPCS_USE_SWI 0 "Use SWI (v1.1) interface"
-add_sw_setting boolean_define_only system_h_define epcs.use_spi EPCS_FATFS_EPCS_USE_SPI 0 "Use SPI interface"
-add_sw_setting decimal_number system_h_define epcs.spi_slavenumber EPCS_FATFS_EPCS_SPI_SLAVE 0 "Slave number for SPI interface"
+add_sw_setting boolean_define_only system_h_define interface.use_peridot_swi EPCS_FATFS_IF_PERIDOT_SWI 0 "Use SWI interface (peridot_swi_driver)"
+add_sw_setting boolean_define_only system_h_define interface.use_altera_spi EPCS_FATFS_IF_ALTERA_SPI 0 "Use SPI interface (altera_avalon_spi_driver)"
+add_sw_setting boolean_define_only system_h_define interface.use_altera_epcs EPCS_FATFS_IF_ALTERA_EPCS 0 "Use EPCS interface (altera_avalon_epcs_flash_controller_driver)"
+add_sw_setting unquoted_string system_h_define interface.base_address EPCS_FATFS_IF_INST_NAME 0 "Instance name (SPI and EPCS interface only)"
+add_sw_setting decimal_number system_h_define interface.spi_slavenumber EPCS_FATFS_IF_SPI_SLAVE 0 "Slave number (SPI interface only)"
 add_sw_setting decimal_number system_h_define flash.sector_size EPCS_FATFS_FLASH_SECTOR 4096 "Sector size in bytes"
 add_sw_setting hex_number system_h_define flash.start_address EPCS_FATFS_FLASH_START 0x0 "Start address of flash"
 add_sw_setting hex_number system_h_define flash.end_address EPCS_FATFS_FLASH_END 0x0 "End address of flash (0=auto detect)"

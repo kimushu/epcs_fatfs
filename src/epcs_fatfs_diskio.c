@@ -6,46 +6,44 @@
 #include "system.h"
 #include "io.h"
 #include <sched.h>
+#include <stddef.h>
 
 /* Definitions of physical drive number for each drive */
 #define EPCS	0
 
-#ifdef EPCS_FATFS_EPCS_USE_SWI
-# ifdef EPCS_FATFS_EPCS_USE_SPI
-#  error "epcs.use_swi and epcs.use_spi cannot be used at the same time"
-# endif
-# define USE_SWI
+#if (defined(EPCS_FATFS_IF_PERIDOT_SWI) && defined(EPCS_FATFS_IF_ALTERA_SPI)) || \
+	(defined(EPCS_FATFS_IF_PERIDOT_SWI) && defined(EPCS_FATFS_IF_ALTERA_EPCS)) || \
+	(defined(EPCS_FATFS_IF_ALTERA_SPI) && defined(EPCS_FATFS_IF_ALTERA_EPCS))
+# error "Only one of interface.use_xxx options can be enabled"
+#endif
 
-# define REG_WRITE(d)		IOWR((EPCS_FATFS_EPCS_BASE), 5, (d))
-# define REG_READ()			IORD((EPCS_FATFS_EPCS_BASE), 5)
-
-# define BIT_IRQENA			(1 << 15)
-# define BIT_RDY			(1 << 9)
-# define BIT_STA			(1 << 9)
-# define BIT_SS				(1 << 8)
+#if defined(EPCS_FATFS_IF_PERIDOT_SWI)
+# define USE_PERIDOT_SWI
+# include "peridot_swi.h"
+# define EPCS_COMMAND(wlen,wptr,rlen,rptr,f) \
+	peridot_swi_flash_command((wlen), (wptr), (rlen), (rptr), (f))
+# define EPCS_MERGE PERIDOT_SWI_FLASH_COMMAND_MERGE
+#elif defined(EPCS_FATFS_IF_ALTERA_SPI)
+# define USE_ALTERA_SPI
+# define ALTERA_SPI_BASE \
+	(EPCS_FATFS_IF_INST_NAME##_BASE)
+# define ALTERA_SPI_SLAVE EPCS_FATFS_IF_SPI_SLAVE
+#elif defined(EPCS_FATFS_IF_ALTERA_SPI)
+# define USE_ALTERA_EPCS
+/* EPCS controller uses altera_avalon_spi internally */
+# define ALTERA_SPI_BASE \
+	(EPCS_FATFS_IF_INST_NAME##_BASE+EPCS_FATFS_IF_INST_NAME##_REGISTER_OFFSET)
+# define ALTERA_SPI_SLAVE 0
 #else
-# ifdef EPCS_FATFS_EPCS_USE_SPI
-#  define USE_SPI
-#  define SPI_OFFSET 0
-# else
-#  define SPI_OFFSET (0x400/4)
-# endif
-
-# define REG_TXD_WRITE(d)	IOWR((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+0, (d))
-# define REG_RXD_READ()		IORD((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+1)
-# define REG_STA_WRITE(d)	IOWR((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+2, (d))
-# define REG_STA_READ()		IORD((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+2)
-# define REG_CTL_WRITE(d)	IOWR((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+3, (d))
-# define REG_CTL_READ()		IORD((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+3)
-
-# define BIT_RRDY			(1 << 7)
-# define BIT_TRDY			(1 << 6)
-
-# ifdef USE_SPI
-#  define REG_SS_WRITE(d)	IOWR((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+5, (d))
-#  define REG_SS_READ()		IORD((EPCS_FATFS_EPCS_BASE), SPI_OFFSET+5)
-#  define BIT_SS			(1 << (EPCS_FATFS_EPCS_SPI_SLAVE))
-# endif
+# error "One of interface.use_xxx options should be enabled"
+#endif
+#ifdef ALTERA_SPI_BASE
+# include "altera_avalon_spi.h"
+# define EPCS_COMMAND(wlen,wptr,rlen,rptr,f) \
+	alt_avalon_spi_command((ALTERA_SPI_BASE), \
+			(ALTERA_SPI_SLAVE), \
+			(wlen), (wptr), (rlen), (rptr), (f))
+# define EPCS_MERGE ALT_AVALON_SPI_COMMAND_MERGE
 #endif
 
 #if (EPCS_FATFS_FLASH_SECTOR == 512)
@@ -72,54 +70,6 @@
 static UINT epcs_total_sectors;	// Includes hidden sectors
 static UINT epcs_start_sector;
 static UINT epcs_end_sector;
-
-
-/*-----------------------------------------------------------------------*/
-/* Start transaction                                                     */
-/*-----------------------------------------------------------------------*/
-static void EPCS_start(void)
-{
-#ifdef USE_SWI
-	// Wait for device ready
-	while (!(REG_READ() & BIT_RDY)) sched_yield();
-#endif
-
-	// Slave select
-#ifdef USE_SPI
-	REG_SS_WRITE(BIT_SS);
-#endif
-}
-
-
-
-/*-----------------------------------------------------------------------*/
-/* Data transfer                                                         */
-/*-----------------------------------------------------------------------*/
-static BYTE EPCS_transfer(
-	BYTE tx_data
-)
-{
-#ifdef USE_SWI
-	DWORD rx;
-	REG_WRITE(BIT_STA | BIT_SS | tx_data);
-	while (!((rx = REG_READ()) & BIT_RDY)) sched_yield();
-	return (BYTE)rx;
-#endif
-}
-
-
-
-/*-----------------------------------------------------------------------*/
-/* End transaction                                                       */
-/*-----------------------------------------------------------------------*/
-static void EPCS_end(void)
-{
-	// End transaction
-#ifdef USE_SWI
-	REG_WRITE(0);
-#endif
-}
-
 
 
 /*-----------------------------------------------------------------------*/
@@ -150,16 +100,17 @@ DSTATUS disk_status (
 /*-----------------------------------------------------------------------*/
 static DSTATUS EPCS_disk_initialize(void)
 {
-	BYTE jedec_cap;
+	static const BYTE rdid[1] = { EPCS_FATFS_FLASH_CMD_RDID };
+	BYTE id[3];
+	int result;
 
 	// Detect capacity by READ IDENTIFICATION command
-	EPCS_start();
-	EPCS_transfer(EPCS_FATFS_FLASH_CMD_RDID);
-	EPCS_transfer(0xff);	/* mfg */
-	EPCS_transfer(0xff);	/* type */
-	jedec_cap = EPCS_transfer(0xff);
-	EPCS_end();
-	epcs_total_sectors = (1 << (jedec_cap - SECT_SHIFT));
+	result = EPCS_COMMAND(sizeof(rdid), rdid, sizeof(id), id, 0);
+	if ((result < 0) || (id[0] == 0xff) || (id[1] == 0xff) || (id[2] == 0xff))
+	{
+		return STA_NOINIT;
+	}
+	epcs_total_sectors = (1 << (id[2] - SECT_SHIFT));
 
 	// Calculate parameters
 	epcs_start_sector = (EPCS_FATFS_FLASH_START + SECT_SIZE - 1) >> SECT_SHIFT;
@@ -197,7 +148,8 @@ DSTATUS disk_initialize (
 static DRESULT EPCS_disk_read(BYTE *buff, DWORD sector, UINT count)
 {
 	DWORD addr;
-	DWORD bytes;
+	BYTE cmd[5];
+	int result;
 
 	sector += epcs_start_sector;
 	if ((sector + count) > epcs_end_sector)
@@ -206,17 +158,18 @@ static DRESULT EPCS_disk_read(BYTE *buff, DWORD sector, UINT count)
 	}
 	addr = (sector << SECT_SHIFT);
 
-	EPCS_start();
-	EPCS_transfer(EPCS_FATFS_FLASH_CMD_FREAD);
-	EPCS_transfer((BYTE)(addr >> 16));
-	EPCS_transfer((BYTE)(addr >> 8));
-	EPCS_transfer((BYTE)(addr >> 0));
-	EPCS_transfer(0xff);
-	for (bytes = (count << SECT_SHIFT); bytes > 0; --bytes)
+	cmd[0] = EPCS_FATFS_FLASH_CMD_FREAD;
+	cmd[1] = (BYTE)(addr >> 16);
+	cmd[2] = (BYTE)(addr >> 8);
+	cmd[3] = (BYTE)(addr >> 0);
+	cmd[4] = 0xff;
+
+	result = EPCS_COMMAND(sizeof(cmd), cmd, (count << SECT_SHIFT), buff, 0);
+	if (result < 0)
 	{
-		*buff++ = EPCS_transfer(0xff);
+		return RES_ERROR;
 	}
-	EPCS_end();
+
 	return RES_OK;
 }
 
@@ -245,13 +198,17 @@ DRESULT disk_read (
 #if _USE_WRITE
 static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 {
-	BYTE cmd;
+	static const BYTE encmd[1] = { EPCS_FATFS_FLASH_CMD_WREN };
+	static const BYTE srcmd[1] = { EPCS_FATFS_FLASH_CMD_RDSR };
+	BYTE wrcmd[4];
+	int result;
 	DWORD addr;
 	INT page;
-	DWORD bytes;
 #ifdef EPCS_FATFS_FLASH_VERIFY
 	const BYTE *v_buff = buff;
 	DWORD v_addr;
+	BYTE rdcmd[4];
+	BYTE c_buff[PAGE_SIZE];
 #endif
 
 	sector += epcs_start_sector;
@@ -266,48 +223,59 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 
 	for (; count > 0; --count)
 	{
-		cmd = EPCS_FATFS_FLASH_CMD_ERASE;
+		wrcmd[0] = EPCS_FATFS_FLASH_CMD_ERASE;
 
 		// Program pages
 		for (page = -1; page < (SECT_SIZE / PAGE_SIZE); ++page)
 		{
 			// Write Enable
-			EPCS_start();
-			EPCS_transfer(EPCS_FATFS_FLASH_CMD_WREN);
-			EPCS_end();
+			result = EPCS_COMMAND(sizeof(encmd), encmd, 0, NULL, 0);
+			if (result < 0)
+			{
+				return RES_ERROR;
+			}
 
-			EPCS_start();
-			EPCS_transfer(cmd);
-			EPCS_transfer((BYTE)(addr >> 16));
-			EPCS_transfer((BYTE)(addr >> 8));
-			EPCS_transfer((BYTE)(addr >> 0));
+			wrcmd[1] = (BYTE)(addr >> 16);
+			wrcmd[2] = (BYTE)(addr >> 8);
+			wrcmd[3] = (BYTE)(addr >> 0);
 
 			if (page < 0)
 			{
 				// Erase sector
-				EPCS_end();
-				cmd = EPCS_FATFS_FLASH_CMD_PROG;
+				result = EPCS_COMMAND(sizeof(wrcmd), wrcmd, 0, NULL, 0);
+				if (result < 0)
+				{
+					return RES_ERROR;
+				}
+				wrcmd[0] = EPCS_FATFS_FLASH_CMD_PROG;
 			}
 			else
 			{
 				// Page program
-				for (bytes = PAGE_SIZE; bytes > 0; --bytes)
+				result = EPCS_COMMAND(sizeof(wrcmd), wrcmd, 0, NULL, EPCS_MERGE);
+				if (result >= 0)
 				{
-					EPCS_transfer(*buff++);
+					result = EPCS_COMMAND(PAGE_SIZE, buff, 0, NULL, 0);
+					buff += PAGE_SIZE;
+					addr += PAGE_SIZE;
 				}
-				EPCS_end();
-				addr += PAGE_SIZE;
+			}
+
+			if (result < 0)
+			{
+				return RES_ERROR;
 			}
 
 			// Wait until finish erase/program
 			for (;;)
 			{
-				EPCS_start();
-				EPCS_transfer(EPCS_FATFS_FLASH_CMD_RDSR);
-				EPCS_transfer(0xff);
-				cmd = EPCS_transfer(0xff);
-				EPCS_end();
-				if ((cmd & 1) == 0)
+				BYTE sr[2];
+				result = EPCS_COMMAND(sizeof(srcmd), srcmd, sizeof(sr), sr, 0);
+				if (result < 0)
+				{
+					return RES_ERROR;
+				}
+				if ((sr[1] & 1) == 0)
 				{
 					// WIP bit is off
 					break;
@@ -317,23 +285,33 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 
 #ifdef EPCS_FATFS_FLASH_VERIFY
 		// Verify
-		EPCS_start();
-		EPCS_transfer(EPCS_FATFS_FLASH_CMD_FREAD);
-		EPCS_transfer((BYTE)(addr >> 16));
-		EPCS_transfer((BYTE)(addr >> 8));
-		EPCS_transfer((BYTE)(addr >> 0));
-		EPCS_transfer(0xff);
-		for (bytes = SECT_SIZE; bytes > 0; --bytes)
+		rdcmd[0] = EPCS_FATFS_FLASH_CMD_FREAD;
+		rdcmd[1] = (BYTE)(v_addr >> 16);
+		rdcmd[2] = (BYTE)(v_addr >> 8);
+		rdcmd[3] = (BYTE)(v_addr >> 0);
+		rdcmd[4] = 0xff;
+		result = EPCS_COMMAND(sizeof(rdcmd), rdcmd, 0, NULL, EPCS_MERGE);
+		if (result < 0)
 		{
-			BYTE written = EPCS_transfer(0xff);
-			if (written != *v_buff++)
+			return RES_ERROR;
+		}
+		for (page = 0; page < (SECT_SIZE / PAGE_SIZE); ++page)
+		{
+			result = EPCS_COMMAND(0, NULL, PAGE_SIZE, c_buf, EPCS_MERGE);
+			if (result < 0)
 			{
-				// Mismatch
-				EPCS_end();
 				return RES_ERROR;
 			}
+			if (memcmp(c_buff, v_buff, PAGE_SIZE) != 0)
+			{
+				// Mismatch
+				EPCS_COMMAND(0, NULL, 0, NULL, 0);
+				return RES_ERROR;
+			}
+			v_buff += PAGE_SIZE;
 		}
-		EPCS_end();
+		EPCS_COMMAND(0, NULL, 0, NULL, 0);
+		v_addr += SECT_SIZE;
 #endif
 	}
 
