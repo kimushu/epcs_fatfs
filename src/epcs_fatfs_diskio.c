@@ -7,6 +7,7 @@
 #include "io.h"
 #include <sched.h>
 #include <stddef.h>
+#include <string.h>
 
 /* Definitions of physical drive number for each drive */
 #define EPCS	0
@@ -297,7 +298,7 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 		}
 		for (page = 0; page < (SECT_SIZE / PAGE_SIZE); ++page)
 		{
-			result = EPCS_COMMAND(0, NULL, PAGE_SIZE, c_buf, EPCS_MERGE);
+			result = EPCS_COMMAND(0, NULL, PAGE_SIZE, c_buff, EPCS_MERGE);
 			if (result < 0)
 			{
 				return RES_ERROR;
