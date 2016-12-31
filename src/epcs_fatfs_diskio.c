@@ -208,7 +208,7 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 #ifdef EPCS_FATFS_FLASH_VERIFY
 	const BYTE *v_buff = buff;
 	DWORD v_addr;
-	BYTE rdcmd[4];
+	BYTE rdcmd[5];
 	BYTE c_buff[PAGE_SIZE];
 #endif
 
