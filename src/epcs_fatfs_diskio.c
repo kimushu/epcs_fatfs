@@ -358,7 +358,7 @@ static DRESULT EPCS_disk_ioctl(BYTE cmd, void *buff)
 		return RES_OK;
 
 	case GET_BLOCK_SIZE:
-		*(DWORD *)buff = SECT_SIZE;
+		*(DWORD *)buff = SECT_SIZE / SECT_SIZE;
 		return RES_OK;
 
 	case CTRL_TRIM:
