@@ -29,7 +29,7 @@ add_sw_property supported_bsp_type TINYTH
 # Settings
 
 add_sw_setting quoted_string system_h_define mount_point EPCS_FATFS_MOUNT_POINT /mnt/epcs "Mount point"
-add_sw_setting boolean_define_only system_h_define interface.use_peridot_swi EPCS_FATFS_IF_PERIDOT_SWI 0 "Use SWI interface (peridot_swi_driver)"
+add_sw_setting boolean_define_only system_h_define interface.use_peridot_spi_flash EPCS_FATFS_IF_PERIDOT_SPI_FLASH 0 "Use SPI flash interface (peridot_spi_master_driver)"
 add_sw_setting boolean_define_only system_h_define interface.use_altera_spi EPCS_FATFS_IF_ALTERA_SPI 0 "Use SPI interface (altera_avalon_spi_driver)"
 add_sw_setting boolean_define_only system_h_define interface.use_altera_epcs EPCS_FATFS_IF_ALTERA_EPCS 0 "Use EPCS interface (altera_avalon_epcs_flash_controller_driver)"
 add_sw_setting unquoted_string system_h_define interface.base_address EPCS_FATFS_IF_INST_NAME 0 "Instance name (SPI and EPCS interface only)"

@@ -12,18 +12,18 @@
 /* Definitions of physical drive number for each drive */
 #define EPCS	0
 
-#if (defined(EPCS_FATFS_IF_PERIDOT_SWI) && defined(EPCS_FATFS_IF_ALTERA_SPI)) || \
-	(defined(EPCS_FATFS_IF_PERIDOT_SWI) && defined(EPCS_FATFS_IF_ALTERA_EPCS)) || \
+#if (defined(EPCS_FATFS_IF_PERIDOT_SPI_FLASH) && defined(EPCS_FATFS_IF_ALTERA_SPI)) || \
+	(defined(EPCS_FATFS_IF_PERIDOT_SPI_FLASH) && defined(EPCS_FATFS_IF_ALTERA_EPCS)) || \
 	(defined(EPCS_FATFS_IF_ALTERA_SPI) && defined(EPCS_FATFS_IF_ALTERA_EPCS))
 # error "Only one of interface.use_xxx options can be enabled"
 #endif
 
-#if defined(EPCS_FATFS_IF_PERIDOT_SWI)
-# define USE_PERIDOT_SWI
-# include "peridot_swi.h"
+#if defined(EPCS_FATFS_IF_PERIDOT_SPI_FLASH)
+# define USE_PERIDOT_SPI_FLASH
+# include "peridot_spi_master.h"
 # define EPCS_COMMAND(wlen,wptr,rlen,rptr,f) \
-	peridot_swi_flash_command((wlen), (wptr), (rlen), (rptr), (f))
-# define EPCS_MERGE PERIDOT_SWI_FLASH_COMMAND_MERGE
+	peridot_spi_flash_command((wlen), (wptr), (rlen), (rptr), (f))
+# define EPCS_MERGE PERIDOT_SPI_MASTER_MERGE
 #elif defined(EPCS_FATFS_IF_ALTERA_SPI)
 # define USE_ALTERA_SPI
 # define ALTERA_SPI_BASE \
