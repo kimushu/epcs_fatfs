@@ -240,7 +240,7 @@ int epcs_fatfs_write(alt_fd *fd, const char *ptr, int len)
 	return -EIO;
 }
 
-int epcs_fatfs_seek(alt_fd *fd, int ptr, int dir)
+int epcs_fatfs_lseek(alt_fd *fd, int ptr, int dir)
 {
 	FRESULT f_result;
 	FIL *fp;

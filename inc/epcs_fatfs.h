@@ -14,7 +14,7 @@ extern int epcs_fatfs_open(alt_fd *fd, const char *name, int flags, int mode);
 extern int epcs_fatfs_close(alt_fd *fd);
 extern int epcs_fatfs_read(alt_fd *fd, char *ptr, int len);
 extern int epcs_fatfs_write(alt_fd *fd, const char *ptr, int len);
-extern int epcs_fatfs_seek(alt_fd *fd, int ptr, int dir);
+extern int epcs_fatfs_lseek(alt_fd *fd, int ptr, int dir);
 extern int epcs_fatfs_fstat(alt_fd *fd, struct stat *buf);
 
 struct epcs_fatfs
@@ -34,7 +34,7 @@ struct epcs_fatfs
       epcs_fatfs_close,                 \
       epcs_fatfs_read,                  \
       epcs_fatfs_write,                 \
-      epcs_fatfs_seek,                  \
+      epcs_fatfs_lseek,                 \
       epcs_fatfs_fstat,                 \
       NULL, /* ioctl */                 \
     },                                  \
