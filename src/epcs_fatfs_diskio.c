@@ -74,6 +74,20 @@ static UINT epcs_end_sector;
 
 
 /*-----------------------------------------------------------------------*/
+/* Lock / unlock functions for RAW access                                */
+/*-----------------------------------------------------------------------*/
+__attribute__((weak)) void epcs_fatfs_raw_lock(void)
+{
+}
+
+__attribute__((weak)) void epcs_fatfs_raw_unlock(void)
+{
+}
+
+
+
+
+/*-----------------------------------------------------------------------*/
 /* Get Drive Status                                                      */
 /*-----------------------------------------------------------------------*/
 static DSTATUS EPCS_disk_status(void)
@@ -146,18 +160,11 @@ DSTATUS disk_initialize (
 /*-----------------------------------------------------------------------*/
 /* Read Sector(s)                                                        */
 /*-----------------------------------------------------------------------*/
-static DRESULT EPCS_disk_read(BYTE *buff, DWORD sector, UINT count)
+int epcs_fatfs_raw_read(int offset, void *ptr, int len)
 {
-	DWORD addr;
+	DWORD addr = offset;
 	BYTE cmd[5];
 	int result;
-
-	sector += epcs_start_sector;
-	if ((sector + count) > epcs_end_sector)
-	{
-		return RES_PARERR;
-	}
-	addr = (sector << SECT_SHIFT);
 
 	cmd[0] = EPCS_FATFS_FLASH_CMD_FREAD;
 	cmd[1] = (BYTE)(addr >> 16);
@@ -165,7 +172,21 @@ static DRESULT EPCS_disk_read(BYTE *buff, DWORD sector, UINT count)
 	cmd[3] = (BYTE)(addr >> 0);
 	cmd[4] = 0xff;
 
-	result = EPCS_COMMAND(sizeof(cmd), cmd, (count << SECT_SHIFT), buff, 0);
+	epcs_fatfs_raw_lock();
+	result = EPCS_COMMAND(sizeof(cmd), cmd, len, ptr, 0);
+	epcs_fatfs_raw_unlock();
+	return result;
+}
+
+static DRESULT EPCS_disk_read(BYTE *buff, DWORD sector, UINT count)
+{
+	int result;
+	sector += epcs_start_sector;
+	if ((sector + count) > epcs_end_sector)
+	{
+		return RES_PARERR;
+	}
+	result = epcs_fatfs_raw_read((sector << SECT_SHIFT), buff, (count << SECT_SHIFT));
 	if (result < 0)
 	{
 		return RES_ERROR;
@@ -197,14 +218,16 @@ DRESULT disk_read (
 /*-----------------------------------------------------------------------*/
 
 #if _USE_WRITE
-static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
+int epcs_fatfs_raw_write(int offset, const void *ptr, int len)
 {
 	static const BYTE encmd[1] = { EPCS_FATFS_FLASH_CMD_WREN };
 	static const BYTE srcmd[1] = { EPCS_FATFS_FLASH_CMD_RDSR };
 	BYTE wrcmd[4];
 	int result;
-	DWORD addr;
+	DWORD addr = offset;
 	INT page;
+	const BYTE *buff = (const BYTE *)ptr;
+	UINT count = (len >> SECT_SHIFT);
 #ifdef EPCS_FATFS_FLASH_VERIFY
 	const BYTE *v_buff = buff;
 	DWORD v_addr;
@@ -212,12 +235,6 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 	BYTE c_buff[PAGE_SIZE];
 #endif
 
-	sector += epcs_start_sector;
-	if ((sector + count) > epcs_end_sector)
-	{
-		return RES_PARERR;
-	}
-	addr = (sector << SECT_SHIFT);
 #ifdef EPCS_FATFS_FLASH_VERIFY
 	v_addr = addr;
 #endif
@@ -229,11 +246,13 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 		// Program pages
 		for (page = -1; page < (SECT_SIZE / PAGE_SIZE); ++page)
 		{
+			epcs_fatfs_raw_lock();
+
 			// Write Enable
 			result = EPCS_COMMAND(sizeof(encmd), encmd, 0, NULL, 0);
 			if (result < 0)
 			{
-				return RES_ERROR;
+				goto error_in_lock;
 			}
 
 			wrcmd[1] = (BYTE)(addr >> 16);
@@ -246,7 +265,7 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 				result = EPCS_COMMAND(sizeof(wrcmd), wrcmd, 0, NULL, 0);
 				if (result < 0)
 				{
-					return RES_ERROR;
+					goto error_in_lock;
 				}
 				wrcmd[0] = EPCS_FATFS_FLASH_CMD_PROG;
 			}
@@ -264,7 +283,7 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 
 			if (result < 0)
 			{
-				return RES_ERROR;
+				goto error_in_lock;
 			}
 
 			// Wait until finish erase/program
@@ -274,7 +293,7 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 				result = EPCS_COMMAND(sizeof(srcmd), srcmd, sizeof(sr), sr, 0);
 				if (result < 0)
 				{
-					return RES_ERROR;
+					goto error_in_lock;
 				}
 				if ((sr[1] & 1) == 0)
 				{
@@ -282,6 +301,8 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 					break;
 				}
 			}
+
+			epcs_fatfs_raw_unlock();
 		}
 
 #ifdef EPCS_FATFS_FLASH_VERIFY
@@ -291,31 +312,53 @@ static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
 		rdcmd[2] = (BYTE)(v_addr >> 8);
 		rdcmd[3] = (BYTE)(v_addr >> 0);
 		rdcmd[4] = 0xff;
+		epcs_fatfs_raw_lock();
 		result = EPCS_COMMAND(sizeof(rdcmd), rdcmd, 0, NULL, EPCS_MERGE);
 		if (result < 0)
 		{
-			return RES_ERROR;
+			goto error_in_lock;
 		}
 		for (page = 0; page < (SECT_SIZE / PAGE_SIZE); ++page)
 		{
 			result = EPCS_COMMAND(0, NULL, PAGE_SIZE, c_buff, EPCS_MERGE);
 			if (result < 0)
 			{
-				return RES_ERROR;
+				goto error_in_lock;
 			}
 			if (memcmp(c_buff, v_buff, PAGE_SIZE) != 0)
 			{
 				// Mismatch
 				EPCS_COMMAND(0, NULL, 0, NULL, 0);
-				return RES_ERROR;
+				goto error_in_lock;
 			}
 			v_buff += PAGE_SIZE;
 		}
 		EPCS_COMMAND(0, NULL, 0, NULL, 0);
+		epcs_fatfs_raw_unlock();
 		v_addr += SECT_SIZE;
 #endif
 	}
 
+	return 0;
+
+error_in_lock:
+	epcs_fatfs_raw_unlock();
+	return -1;
+}
+
+static DRESULT EPCS_disk_write(const BYTE *buff, DWORD sector, UINT count)
+{
+	int result;
+	sector += epcs_start_sector;
+	if ((sector + count) > epcs_end_sector)
+	{
+		return RES_PARERR;
+	}
+	result = epcs_fatfs_raw_write(sector << SECT_SHIFT, buff, (count << SECT_SHIFT));
+	if (result < 0)
+	{
+		return RES_ERROR;
+	}
 	return RES_OK;
 }
 
@@ -340,6 +383,10 @@ DRESULT disk_write (
 /*-----------------------------------------------------------------------*/
 /* Miscellaneous Functions                                               */
 /*-----------------------------------------------------------------------*/
+int epcs_fatfs_raw_get_sectsize(void)
+{
+	return SECT_SIZE;
+}
 
 #if _USE_IOCTL
 static DRESULT EPCS_disk_ioctl(BYTE cmd, void *buff)
