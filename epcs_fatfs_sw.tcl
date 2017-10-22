@@ -5,7 +5,7 @@
 
 create_sw_package epcs_fatfs
 
-set_sw_property version 1.0
+set_sw_property version 1.1
 
 set_sw_property auto_initialize true
 set_sw_property bsp_subdirectory drivers
