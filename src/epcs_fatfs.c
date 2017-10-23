@@ -315,3 +315,14 @@ int epcs_fatfs_fstat(alt_fd *fd, struct stat *buf)
 	return 0;
 }
 
+#if (EPCS_FATFS_USE_LFN != 0)
+void* ff_memalloc (UINT msize)
+{
+	return malloc(msize);
+}
+
+void ff_memfree (void* mblock)
+{
+	free(mblock);
+}
+#endif  /* EPCS_FATFS_USE_LFN != 0 */

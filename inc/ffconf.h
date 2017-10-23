@@ -2,6 +2,7 @@
 /  FatFs - FAT file system module configuration file  R0.11a (C)ChaN, 2015
 /---------------------------------------------------------------------------*/
 
+#include "system.h"
 #define _FFCONF 64180	/* Revision ID */
 
 /*---------------------------------------------------------------------------/
@@ -61,7 +62,7 @@
 / Locale and Namespace Configurations
 /---------------------------------------------------------------------------*/
 
-#define _CODE_PAGE	1
+#define _CODE_PAGE	EPCS_FATFS_CODE_PAGE
 /* This option specifies the OEM code page to be used on the target system.
 /  Incorrect setting of the code page can cause a file open failure.
 /
@@ -90,7 +91,7 @@
 */
 
 
-#define	_USE_LFN	0
+#define	_USE_LFN	(EPCS_FATFS_USE_LFN ? 3 : 0)
 #define	_MAX_LFN	255
 /* The _USE_LFN option switches the LFN feature.
 /
