@@ -23,7 +23,7 @@
 # include "peridot_spi_flash.h"
 # define EPCS_COMMAND(wlen,wptr,rlen,rptr,f) \
 	peridot_spi_flash_command((wlen), (wptr), (rlen), (rptr), (f))
-# define EPCS_MERGE PERIDOT_SPI_MASTER_MERGE
+# define EPCS_MERGE PERIDOT_SPI_FLASH_MERGE
 #elif defined(EPCS_FATFS_IF_ALTERA_SPI)
 # define USE_ALTERA_SPI
 # define ALTERA_SPI_BASE \
