@@ -45,7 +45,7 @@ add_sw_setting hex_number system_h_define flash.start_address EPCS_FATFS_FLASH_S
 add_sw_setting hex_number system_h_define flash.end_address EPCS_FATFS_FLASH_END 0x0 "End address of flash (0=auto detect)"
 add_sw_setting hex_number system_h_define flash.sector_erase_cmd EPCS_FATFS_FLASH_CMD_ERASE 0x20 "Command for sector erase"
 add_sw_setting boolean_define_only system_h_define flash.enable_verify EPCS_FATFS_FLASH_VERIFY 0 "Verify after writing sector"
-add_sw_setting boolean system_h_define fatfs.use_lfn EPCS_FATFS_USE_LFN 1 "Use LFN feature"
+add_sw_setting boolean system_h_define fatfs.use_lfn EPCS_FATFS_USE_LFN 0 "Use LFN feature"
 add_sw_setting decimal_number system_h_define fatfs.code_page EPCS_FATFS_CODE_PAGE 1 "Code page (1:ASCII, 437:US, 932:Japanese, etc)"
 # add_sw_setting boolean_define_only system_h_define epcs.omit_erase EPCS_FATFS_FLASH_OMIT_ERASE 0 "Omit erase if erase is not required"
 
